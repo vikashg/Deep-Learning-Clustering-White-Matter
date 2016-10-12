@@ -30,7 +30,6 @@ test_name_list = testing_file_fiber_names.readlines()
 with open(training_fileList_randomized) as f:
     num_train_set = sum(1 for _ in f)
 
-
 with open(testing_fileList_randomized) as f:
     num_test_set = sum(1 for _ in f)
 
@@ -55,7 +54,7 @@ Track_label_lookup=dict(zip(trk_labels, keys))
 ########### Now the code for the multilayer perceptron
 # Network Parameters
 n_hidden_1 = 256 # 1st layer number of features
-n_hidden_2 = 128 # 2nd layer number of features
+n_hidden_2 = 256 # 2nd layer number of features
 n_input = 3*num_points # number pf features
 n_classes = num_fiber_bundles # MNIST total classes (0-9 digits)
 
@@ -66,7 +65,8 @@ training_epochs = 200
 batch_size = 1000*3
 display_step = 1
 
-model_file_base='/ifs/loni/faculty/thompson/four_d/Faisal/Projects/NeuralNet_TBI/Outputs/' + subj + '/Trained_models/' + str(num_points) + '_points/Inverse_tracks/' + 'Epoch_' + str(training_epochs) + '/2_layers/' + str(n_hidden_1) + '_' + str(n_hidden_2) + '_' + 'Batch_size_' + str(batch_size) + '/'
+#model_file_base='/ifs/loni/faculty/thompson/four_d/Faisal/Projects/NeuralNet_TBI/Outputs/' + subj + '/Trained_models/' + str(num_points) + '_points/Inverse_tracks/' + 'Epoch_' + str(training_epochs) + '/2_layers/' + str(n_hidden_1) + '_' + str(n_hidden_2) + '_' + 'Batch_size_' + str(batch_size) + '/'
+model_file_base='/ifs/loni/faculty/thompson/four_d/Faisal/Projects/NeuralNet_TBI/Outputs/' + subj + '/Trained_models_test_case/' + str(num_points) + '_points/Inverse_tracks/' + 'Epoch_' + str(training_epochs) + '/2_layers/' + str(n_hidden_1) + '_' + str(n_hidden_2) + '_' + 'Batch_size_' + str(batch_size) + '/'
 
 if not os.path.exists(model_file_base):
     os.makedirs(model_file_base)
@@ -118,8 +118,11 @@ optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 
 
 # Initializing the variables
+
+global_step = tf.Variable(0, name='global_step', trainable = False)
 init = tf.initialize_all_variables()
 
+print('Global Step: ', global_step)
 saver = tf.train.Saver() ## For saving the model
 
 f.write('Results saved in: ' + str( model_file_base) + '\n')
@@ -129,8 +132,18 @@ print('Everything check A ok' + '\n')
 with tf.Session() as sess:
     sess.run(init)
 
+    ## Loading and checking for checkpoints
+    ckpt_dir = tf.train.get_checkpoint_state(model_file_base)
+    if ckpt_dir and ckpt_dir.model_checkpoint_path:
+        saver.restore(sess, ckpt_dir.model_checkpoint_path)
+        print('Model Loaded: ', ckpt_dir.model_checkpoint_path)
+    else:
+        print('Checkpoint not found')
+
+    start = global_step.eval() # Get Global_step_from previous saved model
+    print('Starting from: ', start)
     # Training cycle
-    for epoch in range(training_epochs):
+    for epoch in range(start, training_epochs):
         avg_cost = 0.
         # total_batch = int(mnist.train.num_examples/batch_size)
         total_batch = int(num_train_set*3/batch_size)
@@ -145,8 +158,9 @@ with tf.Session() as sess:
             avg_cost += c / total_batch
             # Display logs per epoch step
         if epoch % display_step == 0:
+            global_step.assign(epoch).eval()
             model_file_path_i = model_file_base + 'MLP_epoch_' + str(epoch) + '.cpkt'
-            save_path = saver.save(sess, model_file_path_i)
+            save_path = saver.save(sess, model_file_path_i, global_step=global_step)
             print("Model saved in file: %s" % save_path)
             print("Epoch:", '%04d' % (epoch+1), "cost=", "{:.9f}".format(avg_cost))
             output_line = 'Epoch: ' + str(epoch+1) + 'cost= '+ str(avg_cost) + '\n'
@@ -155,7 +169,7 @@ with tf.Session() as sess:
     print("Optimization Finished!")
     f.write("Optimization Finished!")
     model_file_path=model_file_base + 'Trained_model_' + str(training_epochs) + '_' + str(learning_rate) + '.cpkt'
-    save_path = saver.save(sess, model_file_path)
+    save_path = saver.save(sess, model_file_path, global_step= global_step)
     print("Model saved in file: %s" % save_path)
 
     correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
